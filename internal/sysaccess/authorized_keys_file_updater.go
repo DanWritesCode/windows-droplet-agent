@@ -29,6 +29,7 @@ func (u *updaterImpl) updateAuthorizedKeysFile(osUsername string, managedKeys []
 		return err
 	}
 	authorizedKeysFile := u.sshMgr.authorizedKeysFile(osUser)
+	log.Info("Auth keys file is " + authorizedKeysFile)
 
 	// We must make sure we are exclusively accessing the authorized_keys file
 	keysFileLockRaw, _ := u.keysFileLocks.LoadOrStore(authorizedKeysFile, &sync.Mutex{})
@@ -37,15 +38,16 @@ func (u *updaterImpl) updateAuthorizedKeysFile(osUsername string, managedKeys []
 	defer keysFileLock.Unlock()
 
 	dir := filepath.Dir(authorizedKeysFile)
-	log.Debug("ensuring dir [%s] exists for user [%s]", dir, osUser.Name)
+	log.Debug("ensuring dir [%s] exists for user [%s] [%s]", dir, osUser.Name, authorizedKeysFile)
 	if err = u.sshMgr.sysMgr.MkDirIfNonExist(dir, osUser, 0700); err != nil {
 		return err
 	}
 	fileExist := true
 	localKeysRaw, err := u.sshMgr.sysMgr.ReadFile(authorizedKeysFile)
 	if err != nil {
+		log.Debug(err.Error())
 		if !os.IsNotExist(err) {
-			return fmt.Errorf("%w:%v", ErrReadAuthorizedKeysFileFailed, err)
+			return fmt.Errorf("%w %v", ErrReadAuthorizedKeysFileFailed, err)
 		}
 		fileExist = false
 	}
@@ -62,33 +64,16 @@ func (u *updaterImpl) updateAuthorizedKeysFile(osUsername string, managedKeys []
 
 func (u *updaterImpl) do(authorizedKeysFile string, user *sysutil.User, lines []string, srcFileExist bool) (retErr error) {
 	log.Debug("updating [%s]", authorizedKeysFile)
-	tmpFilePath := authorizedKeysFile + ".dotty"
-	tmpFile, err := u.sshMgr.sysMgr.CreateFileForWrite(tmpFilePath, user, 0600)
+	notSoTmpFile, err := u.sshMgr.sysMgr.CreateFileForWrite(authorizedKeysFile, user, 0600)
 	if err != nil {
-		return fmt.Errorf("%w: failed to create tmp file: %v", ErrWriteAuthorizedKeysFileFailed, err)
+		return fmt.Errorf("%w: failed to open authorizedKeysFile: %v", ErrWriteAuthorizedKeysFileFailed, err)
 	}
-	defer func() {
-		log.Debug("[%s] updated", authorizedKeysFile)
-		_ = tmpFile.Close()
-		if retErr != nil {
-			_ = u.sshMgr.sysMgr.RemoveFile(tmpFilePath)
-		}
-	}()
 
 	for _, l := range lines {
-		_, _ = fmt.Fprintf(tmpFile, "%s\n", l)
+		_, _ = fmt.Fprintf(notSoTmpFile, "%s\n", l)
 	}
 
-	if srcFileExist {
-		log.Debug("copying file attribute from [%s] to [%s]", authorizedKeysFile, tmpFilePath)
-		err := u.sshMgr.sysMgr.CopyFileAttribute(authorizedKeysFile, tmpFilePath)
-		if err != nil {
-			return fmt.Errorf("%w:failed to apply file attribute :%v", ErrWriteAuthorizedKeysFileFailed, err)
-		}
-	}
+	notSoTmpFile.Close()
 
-	if err := u.sshMgr.sysMgr.RenameFile(tmpFilePath, authorizedKeysFile); err != nil {
-		return fmt.Errorf("%w:failed to rename:%v", ErrWriteAuthorizedKeysFileFailed, err)
-	}
 	return nil
 }

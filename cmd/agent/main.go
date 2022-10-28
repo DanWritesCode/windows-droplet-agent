@@ -80,7 +80,6 @@ func handleShutdown(bgJobsCancel context.CancelFunc, metadataWatcher watcher.Met
 	signal.Notify(signalChan,
 		syscall.SIGINT,
 		syscall.SIGTERM,
-		syscall.SIGTSTP,
 		syscall.SIGQUIT,
 	)
 
@@ -92,7 +91,7 @@ func handleShutdown(bgJobsCancel context.CancelFunc, metadataWatcher watcher.Met
 		bgJobsCancel()
 		metadataWatcher.Shutdown()
 		_ = sshMgr.Close()
-	case syscall.SIGTSTP, syscall.SIGQUIT:
+	case syscall.SIGQUIT:
 		log.Info("[%s] Forced to quit! You may lose jobs in progress", config.AppShortName)
 	default:
 		log.Error("unsupported signal, %d", c)
@@ -127,16 +126,9 @@ func updateMetadata(infoUpdater updater.AgentInfoUpdater, md *metadata.Metadata,
 }
 
 func mustMonitorSSHDConfig(sshMgr *sysaccess.SSHManager) {
-	cfgChanged, err := sshMgr.WatchSSHDConfig()
+	_, err := sshMgr.WatchSSHDConfig()
 	if err != nil {
 		log.Fatal("Failed to watch for sshd_config changes. error: %v", err)
 	}
-	if _, ok := <-cfgChanged; ok {
-		// change detected, terminate the agent
-		// and the systemd will restart it
-		if err := syscall.Kill(syscall.Getpid(), syscall.SIGTERM); err != nil {
-			log.Debug("Failed to send signal to process")
-			os.Exit(2)
-		}
-	}
+
 }
