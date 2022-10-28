@@ -9,6 +9,29 @@
 
 Droplet Agent is the daemon that runs on DigitalOcean's customer droplets to enable some features such as web console access.
 
+# Windows 10 Support
+
+This fork of Droplet Agent is a PoC for supporting web console access on Windows 10 droplets. 
+
+![image](https://user-images.githubusercontent.com/50718889/198739844-fa72307c-5968-4e55-a057-a3d3a4dcc9c0.png)
+
+# System Dependencies
+
+This fork relies on:
+- OpenSSH to be installed and running
+    - Follow Microsoft's guide here: https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_install_firstuse?tabs=gui
+- OpenSSH to be configured on the Windows 10 machine
+    - In sshd_config, set password login off
+    - Also in sshd_config, only have one AuthorizedKeysFile entry (no group or __PROGRAMDATA__ ones)
+    - PermitRootLogin yes
+- You may need to configure a network route to access the metadata service:
+    - `route add 169.254.169.254 mask 255.255.255.255 YOUR_DEFAULT_GATEWAY`
+    - Replace YOUR_DEFAULT_GATEWAY with the default gateway your droplet is using
+    - After this, you should be able to successfully `curl http://169.254.169.254/metadata/v1/`
+    - The 169 IP is a special IP that all droplets can use to read their own metadata
+        - AWS and Azure use it too!
+        
+
 * [Building](#building)
   * [Building From Source Code](#building-from-source-code) 
   * [Packaging](#building-from-source-code) 
